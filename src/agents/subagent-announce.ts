@@ -75,6 +75,16 @@ function resolveSubagentAnnounceTimeoutMs(cfg: ReturnType<typeof loadConfig>): n
   return Math.min(Math.max(1, Math.floor(configured)), MAX_TIMER_SAFE_TIMEOUT_MS);
 }
 
+function resolveAnnounceHeader(cfg: ReturnType<typeof loadConfig>): string | false | undefined {
+  return cfg.agents?.defaults?.subagents?.announceHeader;
+}
+
+function resolveAnnounceReplyStyle(
+  cfg: ReturnType<typeof loadConfig>,
+): "synthesize" | "passthrough" {
+  return cfg.agents?.defaults?.subagents?.announceReplyStyle ?? "synthesize";
+}
+
 function buildCompletionDeliveryMessage(params: {
   findings: string;
   subagentName: string;
@@ -82,6 +92,8 @@ function buildCompletionDeliveryMessage(params: {
   outcome?: SubagentRunOutcome;
   announceType?: SubagentAnnounceType;
 }): string {
+  const cfg = loadConfig();
+  const customHeader = resolveAnnounceHeader(cfg);
   const findingsText = params.findings.trim();
   if (isAnnounceSkip(findingsText)) {
     return "";
@@ -92,6 +104,22 @@ function buildCompletionDeliveryMessage(params: {
     return hasFindings ? findingsText : "";
   }
   const header = (() => {
+    // Custom header — only applies to success status.
+    if (
+      typeof customHeader === "string" &&
+      params.outcome?.status !== "error" &&
+      params.outcome?.status !== "timeout"
+    ) {
+      return customHeader.replace(/\{name\}/g, params.subagentName);
+    }
+    // Suppress header entirely for success when set to false.
+    if (
+      customHeader === false &&
+      params.outcome?.status !== "error" &&
+      params.outcome?.status !== "timeout"
+    ) {
+      return "";
+    }
     if (params.outcome?.status === "error") {
       return params.spawnMode === "session"
         ? `❌ Subagent ${params.subagentName} failed this task (session remains active)`
@@ -108,6 +136,9 @@ function buildCompletionDeliveryMessage(params: {
   })();
   if (!hasFindings) {
     return header;
+  }
+  if (!header) {
+    return findingsText;
   }
   return `${header}\n\n${findingsText}`;
 }
@@ -1088,11 +1119,17 @@ function buildAnnounceReplyInstruction(params: {
   announceType: SubagentAnnounceType;
   expectsCompletionMessage?: boolean;
 }): string {
+  const cfg = loadConfig();
+  const replyStyle = resolveAnnounceReplyStyle(cfg);
   if (params.remainingActiveSubagentRuns > 0) {
     const activeRunsLabel = params.remainingActiveSubagentRuns === 1 ? "run" : "runs";
     return `There are still ${params.remainingActiveSubagentRuns} active subagent ${activeRunsLabel} for this session. If they are part of the same workflow, wait for the remaining results before sending a user update. If they are unrelated, respond normally using only the result above.`;
   }
   if (params.requesterIsSubagent) {
+    // Passthrough mode: forward child result verbatim instead of synthesizing.
+    if (replyStyle === "passthrough") {
+      return "Forward the subagent's response to the user exactly as-is. Do not summarize, rewrite, or add any commentary. Send the response verbatim.";
+    }
     return `Convert this completion into a concise internal orchestration update for your parent agent in your own words. Keep this internal context private (don't mention system/log/stats/session details or announce type). If this result is duplicate or no update is needed, reply ONLY: ${SILENT_REPLY_TOKEN}.`;
   }
   if (params.expectsCompletionMessage) {

@@ -176,6 +176,8 @@ export const AgentDefaultsSchema = z
         thinking: z.string().optional(),
         runTimeoutSeconds: z.number().int().min(0).optional(),
         announceTimeoutMs: z.number().int().positive().optional(),
+        announceHeader: z.union([z.string(), z.literal(false)]).optional(),
+        announceReplyStyle: z.union([z.literal("synthesize"), z.literal("passthrough")]).optional(),
       })
       .strict()
       .optional(),

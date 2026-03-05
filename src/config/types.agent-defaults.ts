@@ -281,6 +281,21 @@ export type AgentDefaultsConfig = {
     runTimeoutSeconds?: number;
     /** Gateway timeout in ms for sub-agent announce delivery calls (default: 60000). */
     announceTimeoutMs?: number;
+    /**
+     * Customize or suppress the status header prepended to subagent announce messages.
+     * - string template with {name} placeholder (e.g., "🎲 {name} says:")
+     * - empty string "" to deliver only the response body
+     * - false to suppress the header entirely
+     * Error/timeout headers are always preserved regardless of this setting.
+     */
+    announceHeader?: string | false;
+    /**
+     * How the parent agent should handle subagent completion results.
+     * - "synthesize" (default): parent converts child result into an internal orchestration update
+     * - "passthrough": parent forwards child result verbatim — for formatter/personality chains
+     *   where the child's output IS the final response
+     */
+    announceReplyStyle?: "synthesize" | "passthrough";
   };
   /** Optional sandbox settings for non-main sessions. */
   sandbox?: AgentSandboxConfig;
